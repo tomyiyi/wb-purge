@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -156,7 +157,22 @@ export function snapshot(base: string, targets: readonly Target[]): SnapshotMani
     files: files.map(({ target, file, sha256: hash, bytes }) => ({ target, file, sha256: hash, bytes })),
   });
   writeFileSync(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  pruneSnapshots(base, 30);
   return manifest;
+}
+
+/** 定时守卫会频繁快照，只保留最近 N 份。 */
+function pruneSnapshots(base: string, keep: number): void {
+  const root = snapshotRoot(base);
+  if (!existsSync(root)) return;
+  const ids = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+    .reverse();
+  for (const id of ids.slice(keep)) {
+    rmSync(join(root, id), { recursive: true, force: true });
+  }
 }
 
 export function listSnapshots(base: string): SnapshotManifest[] {
