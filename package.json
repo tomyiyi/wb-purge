@@ -1,0 +1,39 @@
+{
+  "name": "wb-purge",
+  "version": "1.0.0",
+  "description": "WorkBuddy 的「破甲」实装版：把逐条弹窗的审批摩擦清掉，保留三道真闸。快照先行，随时回滚。",
+  "type": "module",
+  "bin": {
+    "wb-purge": "./dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "keywords": [
+    "workbuddy",
+    "permission",
+    "friction",
+    "snapshot",
+    "skill",
+    "zod"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
