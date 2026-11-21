@@ -7,6 +7,7 @@ import {
   configFile,
   destructiveAllows,
   extractGuardrails,
+  hardenConfig,
   listSnapshots,
   mergePreset,
   planPreset,
@@ -104,4 +105,15 @@ test('配置文件路径按 target 区分', () => {
   const fixture = makeBase();
   assert.equal(configFile(fixture.base, 'work'), fixture.workFile);
   assert.equal(configFile(fixture.base, 'global'), fixture.globalFile);
+});
+
+test('harden：只把破坏性放行降级为 ask，普通规则不动', () => {
+  const config = readConfig(makeBase().globalFile);
+  const { config: next, changed } = hardenConfig(config);
+
+  assert.deepEqual(changed, ['rm *']);
+  assert.equal(next.rules.commandRules['rm *']?.approval, 'ask');
+  assert.equal(next.rules.commandRules['cat *']?.approval, 'allow');
+  assert.equal(config.rules.commandRules['rm *']?.approval, 'allow', '不能改原对象');
+  assert.deepEqual(destructiveAllows(next), []);
 });

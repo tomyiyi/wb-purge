@@ -15,6 +15,7 @@ import {
   statusReport,
   writeConfig,
   extractGuardrails,
+  hardenConfig,
 } from './store.js';
 import type { Target } from './schema.js';
 
@@ -24,6 +25,7 @@ const USAGE = `wb-purge — 清掉 WorkBuddy 的审批摩擦，保留三道真�
   wb-purge status [--target global|work|both] [--json]   现状体检
   wb-purge diff <strict|fast> [--target ...]             只看会加哪些规则
   wb-purge apply <strict|fast> [--dry-run] [--target ...] 快照 → 合并 → 写盘
+  wb-purge harden [--dry-run]                            把已放行的破坏性命令降级为 ask
   wb-purge snapshots [--json]                            列出快照
   wb-purge restore <快照ID> [--target ...]                回滚
 
@@ -184,6 +186,38 @@ function main(): number {
       console.log(`\n注意：以下破坏性命令原本就是放行状态，本工具没动它们：\n  ${[...new Set(risky)].join('  ')}`);
     }
     console.log('\n重启 WorkBuddy 后生效；不对就 `wb-purge restore ' + manifest.id + '` 一条命令回滚。');
+    return 0;
+  }
+
+  if (command === 'harden') {
+    const targets = targetsOf(flags.target).filter((target) => existsSync(configFile(flags.base, target)));
+    if (targets.length === 0) throw new Error('没有可处理的配置文件');
+
+    const pending = targets
+      .map((target) => ({ target, config: readConfig(configFile(flags.base, target)) }))
+      .map((entry) => ({ ...entry, result: hardenConfig(entry.config) }))
+      .filter((entry) => entry.result.changed.length > 0);
+
+    if (pending.length === 0) {
+      console.log('没有需要降级的破坏性放行。');
+      return 0;
+    }
+
+    for (const entry of pending) {
+      console.log(`[${entry.target}] 降级为 ask：${entry.result.changed.join('  ')}`);
+    }
+    if (flags.dryRun) {
+      console.log('\n--dry-run：没有写入。');
+      return 0;
+    }
+
+    const manifest = snapshot(flags.base, pending.map((entry) => entry.target));
+    console.log(`\n已快照：${manifest.id}`);
+    for (const entry of pending) {
+      writeConfig(configFile(flags.base, entry.target), entry.result.config);
+      console.log(`已写入 ${configFile(flags.base, entry.target)}`);
+    }
+    console.log(`\n重启 WorkBuddy 后生效；反悔就 restore ${manifest.id}`);
     return 0;
   }
 

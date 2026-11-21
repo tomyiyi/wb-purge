@@ -69,3 +69,19 @@ test('cli 未知参数：退出码 2', () => {
   const result = run(['apply', 'strict', '--bogus']);
   assert.equal(result.status, 2);
 });
+
+test('cli harden：降级后破坏性放行为 0，且可回滚', () => {
+  const fixture = makeBase();
+  const hardened = run(['harden', '--base', fixture.base, '--target', 'global']);
+  assert.equal(hardened.status, 0, hardened.stderr);
+
+  const status = JSON.parse(
+    run(['status', '--base', fixture.base, '--target', 'global', '--json']).stdout,
+  ) as { destructiveAllows: string[] }[];
+  assert.deepEqual(status[0]?.destructiveAllows, []);
+
+  const list = JSON.parse(run(['snapshots', '--base', fixture.base, '--json']).stdout) as { id: string }[];
+  const restored = run(['restore', list[0]!.id, '--base', fixture.base, '--target', 'global']);
+  assert.equal(restored.status, 0, restored.stderr);
+  assert.equal(readFileSync(fixture.globalFile, 'utf8'), fixture.text);
+});

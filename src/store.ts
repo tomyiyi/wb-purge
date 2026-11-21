@@ -107,6 +107,25 @@ export function mergePreset(config: PermissionConfig, name: PresetName): Permiss
   return next;
 }
 
+/**
+ * 反向操作：把已放行的破坏性命令降级为 ask。
+ * 只动「不可逆」的那几条（rm/kill/chmod/sudo…），其余放行保持静默。
+ */
+export function hardenConfig(config: PermissionConfig): {
+  config: PermissionConfig;
+  changed: string[];
+} {
+  const next: PermissionConfig = JSON.parse(JSON.stringify(config)) as PermissionConfig;
+  const changed: string[] = [];
+  for (const [pattern, rule] of Object.entries(next.rules.commandRules)) {
+    if (rule.approval === 'allow' && isDestructivePattern(pattern)) {
+      next.rules.commandRules[pattern] = { ...rule, approval: 'ask' };
+      changed.push(pattern);
+    }
+  }
+  return { config: next, changed };
+}
+
 export function snapshot(base: string, targets: readonly Target[]): SnapshotManifest {
   const files: SnapshotManifest['files'] = [];
   for (const target of targets) {
