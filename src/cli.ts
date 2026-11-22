@@ -16,6 +16,7 @@ import {
   writeConfig,
   extractGuardrails,
   hardenConfig,
+  compactConfig,
 } from './store.js';
 import type { Target } from './schema.js';
 
@@ -26,6 +27,7 @@ const USAGE = `wb-purge — 清掉 WorkBuddy 的审批摩擦，保留三道真�
   wb-purge diff <strict|fast> [--target ...]             只看会加哪些规则
   wb-purge apply <strict|fast> [--dry-run] [--target ...] 快照 → 合并 → 写盘
   wb-purge harden [--dry-run]                            把已放行的破坏性命令降级为 ask
+  wb-purge compact [--dry-run]                           删除被「X *」覆盖的冗余规则
   wb-purge snapshots [--json]                            列出快照
   wb-purge restore <快照ID> [--target ...]                回滚
 
@@ -186,6 +188,38 @@ function main(): number {
       console.log(`\n注意：以下破坏性命令原本就是放行状态，本工具没动它们：\n  ${[...new Set(risky)].join('  ')}`);
     }
     console.log('\n重启 WorkBuddy 后生效；不对就 `wb-purge restore ' + manifest.id + '` 一条命令回滚。');
+    return 0;
+  }
+
+  if (command === 'compact') {
+    const targets = targetsOf(flags.target).filter((target) => existsSync(configFile(flags.base, target)));
+    if (targets.length === 0) throw new Error('没有可处理的配置文件');
+
+    const pending = targets
+      .map((target) => ({ target, config: readConfig(configFile(flags.base, target)) }))
+      .map((entry) => ({ ...entry, result: compactConfig(entry.config) }))
+      .filter((entry) => entry.result.removed.length > 0);
+
+    if (pending.length === 0) {
+      console.log('没有可压缩的冗余规则。');
+      return 0;
+    }
+
+    for (const entry of pending) {
+      console.log(`[${entry.target}] 删除被通配符覆盖的冗余规则 ${entry.result.removed.length} 条：`);
+      for (const name of entry.result.removed) console.log(`  - ${name}`);
+    }
+    if (flags.dryRun) {
+      console.log('\n--dry-run：没有写入。');
+      return 0;
+    }
+
+    const manifest = snapshot(flags.base, pending.map((entry) => entry.target));
+    console.log(`\n已快照：${manifest.id}`);
+    for (const entry of pending) {
+      writeConfig(configFile(flags.base, entry.target), entry.result.config);
+    }
+    console.log('重启 WorkBuddy 后生效。');
     return 0;
   }
 

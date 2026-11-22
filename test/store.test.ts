@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeBase } from './fixture.js';
 import {
+  compactConfig,
   configFile,
   destructiveAllows,
   extractGuardrails,
@@ -105,6 +106,21 @@ test('配置文件路径按 target 区分', () => {
   const fixture = makeBase();
   assert.equal(configFile(fixture.base, 'work'), fixture.workFile);
   assert.equal(configFile(fixture.base, 'global'), fixture.globalFile);
+});
+
+test('compact：删除被通配符覆盖且审批一致的规则', () => {
+  const config = readConfig(makeBase().globalFile);
+  config.rules.commandRules['chmod *'] = { approval: 'allow', execEnv: 'host' };
+  config.rules.commandRules['chmod +x /tmp/x *'] = { approval: 'allow', execEnv: 'host' };
+  config.rules.commandRules['chmod +x /tmp/y *'] = { approval: 'ask', execEnv: 'host' };
+
+  const { config: next, removed } = compactConfig(config);
+
+  assert.deepEqual(removed, ['chmod +x /tmp/x *'], '审批不一致的不能删');
+  assert.equal(next.rules.commandRules['chmod +x /tmp/x *'], undefined);
+  assert.ok(next.rules.commandRules['chmod +x /tmp/y *'], 'ask 与 allow 不同，保留');
+  assert.ok(next.rules.commandRules['chmod *']);
+  assert.ok(config.rules.commandRules['chmod +x /tmp/x *'], '不能改原对象');
 });
 
 test('harden：只把破坏性放行降级为 ask，普通规则不动', () => {

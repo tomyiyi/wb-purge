@@ -109,6 +109,32 @@ export function mergePreset(config: PermissionConfig, name: PresetName): Permiss
 }
 
 /**
+ * 规则压缩：被 `X *` 完全覆盖的同义规则删掉（approval 相同才算安全）。
+ * 71 条里有 3 条 `chmod +x <path> *` 是冗余，删掉行为不变。
+ */
+export function compactConfig(config: PermissionConfig): {
+  config: PermissionConfig;
+  removed: string[];
+} {
+  const next: PermissionConfig = JSON.parse(JSON.stringify(config)) as PermissionConfig;
+  const rules = next.rules.commandRules;
+  const names = Object.keys(rules);
+  const removed: string[] = [];
+
+  for (const name of names) {
+    const base = name.split(' ')[0] ?? '';
+    const wildcard = `${base} *`;
+    if (name === wildcard || !names.includes(wildcard)) continue;
+    if (rules[wildcard]?.approval !== rules[name]?.approval) continue;
+    if (rules[wildcard]?.execEnv !== rules[name]?.execEnv) continue;
+    delete rules[name];
+    removed.push(name);
+  }
+
+  return { config: next, removed };
+}
+
+/**
  * 反向操作：把已放行的破坏性命令降级为 ask。
  * 只动「不可逆」的那几条（rm/kill/chmod/sudo…），其余放行保持静默。
  */
